@@ -1,0 +1,27 @@
+{
+"brand_configuration": {
+"brand_name": "Your Brand Name",
+"industry": "Restaurant / E-commerce / Retail",
+"primary_color_hex": "#ff9900",
+"text_accent_color_hex": "#000000",
+"metadata_line_1": "📍 123 Main Street, New York, NY",
+"metadata_line_2": "📞 (123) 456-6789  •  🌐 yourwebsite.com"
+},
+"grounding_portfolio": [
+{
+"item_name": "Product/Item Name 1",
+"sensory_description": "Detailed physical description (e.g., colors, textures, materials, shapes) to guide the AI image generator.",
+"presentation_style": "Optimal frame and layout presentation (e.g., resting on a clean rustic wooden table, softly blurred background)."
+},
+{
+"item_name": "Product/Item Name 2",
+"sensory_description": "Detailed description of the second item...",
+"presentation_style": "Framing style, plating style, or container specifications..."
+},
+{
+"item_name": "Product/Item Name 3",
+"sensory_description": "Detailed description of the third item...",
+"presentation_style": "Framing style, plating style, or container specifications..."
+}
+]
+}
