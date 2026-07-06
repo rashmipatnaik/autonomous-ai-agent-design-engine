@@ -1,0 +1,557 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        2016,
+        624
+      ],
+      "id": "ab320efa-e1b7-4b24-b8de-376982b699c3",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/[YOUR_SPREADSHEET_ID_HERE]/edit",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2224,
+        624
+      ],
+      "id": "c3ee0fe4-73c2-4adc-9a52-bdbe78d1b9a1",
+      "name": "Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1euazcDXzEtIu43X",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Timezone-resilient Date Matching Logic\n * Handles multiple spreadsheet date boundaries (YYYY-MM-DD vs M/D/YYYY) \n * to prevent pipeline drift across execution intervals.\n */\nconst rows = $input.all();\nconst options = { timeZone: \"America/New_York\", year: \"numeric\", month: \"2-digit\", day: \"2-digit\" };\nconst formatter = new Intl.DateTimeFormat(\"en-US\", options);\nconst [{ value: month }, , { value: day }, , { value: year }] = formatter.formatToParts(new Date());\n\nconst targetDash = `${year}-${month}-${day}`;\nconst targetSlash = `${parseInt(month)}/${parseInt(day)}/${year}`;\nconst matchedPayloads = [];\n\nfor (const row of rows) {\n    const data = row.json;\n    if (!data.Date) continue;\n    const rawDateStr = String(data.Date).trim();\n    const isolatedDate = rawDateStr.split(\"T\")[0];\n    \n    if (isolatedDate === targetDash || isolatedDate === targetSlash) {\n        // Fallback checks for dynamic header labels\n        const description = data[\"Special Description\"] || data[\"Post Note\"] || data.Description || data[\"Item Description\"] || \"\";\n        if (!description.trim()) continue;\n        \n        matchedPayloads.push({\n            json: {\n                matched_run: true,\n                metadata: {\n                    date: isolatedDate,\n                    day: data.Day ? data.Day.trim() : \"Special Day\",\n                    folder_timestamp: `${isolatedDate}_${data.Day ? data.Day.trim() : \"\"}`.trim()\n                },\n                content_payload: {\n                    description: description.trim(),\n                    offer: data.Offer || data[\"Promo Offer\"] || data.Deal ? String(data.Offer || data[\"Promo Offer\"] || data.Deal).trim() : \"\",\n                    notes: data.Notes || data[\"Additional Notes\"] ? String(data.Notes || data[\"Additional Notes\"]).trim() : \"\"\n                }\n            }\n        });\n    }\n}\nreturn matchedPayloads;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        624
+      ],
+      "id": "7d5d823f-f189-4239-b1d1-fa3027ece47c",
+      "name": "Filter Today's Row"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an elite marketing director and a master photography prompt engineer. Your task is to analyze today's inventory data to output a strict JSON object with zero hallucinations.\n\n### THE OFFICIAL BRAND PORTFOLIO / GROUNDING TRUTH (REPLACE WITH YOURS):\n- [Product/Item Name 1]: [Detailed sensory description of the item: colors, texture, shape, and optimal plating/container presentation layout].\n- [Product/Item Name 2]: [Detailed sensory description of the item: colors, texture, shape, and optimal plating/container presentation layout].\n- [Product/Item Name 3]: [Detailed sensory description of the item: colors, texture, shape, and optimal plating/container presentation layout].\n\n### RUNTIME DATA INPUT:\n- Date: {{ $node[\"Filter Today's Row\"].json.metadata.date }}\n- Day: {{ $node[\"Filter Today's Row\"].json.metadata.day }}\n- Description: {{ $node[\"Filter Today's Row\"].json.content_payload.description }}\n- Offer/Promo: {{ $node[\"Filter Today's Row\"].json.content_payload.offer }}\n\n### TASK 1: Write Platform-Specific Captions (Avoiding clichés like 'culinary journey', 'delight your senses', or 'look no further')\n- Instagram: Short, high-energy caption starting with a powerful hook. Includes relevant lifestyle emojis, a 'link in bio' call to action, and 5 hashtags.\n- Facebook: Informative, community-focused caption with clear line breaks. Explicitly write out your location metadata, operating hours, phone, and website.\n- TikTok: Ultra-short, hook-heavy caption optimized for TikTok descriptions with 4 trending hashtags.\n- SMS/WhatsApp: An engaging, professional customer marketing text message under 160 characters designed for mobile VIP alerts. Must state the deal clearly and end with a crisp call-to-action.\n- Trendy Touchy: A short, highly comforting, and joyful caption that captures the pure happiness of experiencing this item with friends. Keep the tone lighthearted, cozy, vibrant, and welcoming. Max 1-2 sentences, and use exactly 1 bright emoji.\n\n### TASK 2: Write the \"flux_prompt\" string (STRICT DYNAMIC GROUNDING)\n1. Identify the specific product/item requested in the Description. Cross-reference it with the Grounding Truth library. Describe ONLY that specific item, its plating, and container style.\n2. DO NOT ADD UNRELATED ITEMS: Keep the photo scene focused strictly on the single featured asset.\n3. NO TEXT OR OVERLAYS: Pure photorealistic scene only.\n4. Staging: Centered item resting on a clean, bare, dark rustic wooden surface. Background is clean and softly blurred.\n\n### OUTPUT REQUIREMENT:\nReturn ONLY a valid, parsable JSON object with no markdown wrapping outside of the block.\n{\n  \"canva_assets\": {\n    \"dish_title\": \"A short, punchy 2-4 word title of the item for the graphic design text box\",\n    \"offer_badge\": \"A short 3-5 word phrase summarizing the discount\"\n  },\n  \"flux_prompt\": \"Your hyper-detailed, grounding-library-matched photography prompt following constraints.\",\n  \"captions\": {\n    \"instagram\": \"Your Instagram caption text here.\",\n    \"facebook\": \"Your Facebook caption text here.\",\n    \"tiktok\": \"Your TikTok caption text here.\",\n    \"sms\": \"Your SMS notification copy here.\",\n    \"trendy_touchy\": \"Your aesthetic emotional caption copy here.\"\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        2624,
+        624
+      ],
+      "id": "e59b314b-342e-4a09-815d-2fab738a7fd5",
+      "name": "Claude Copy & Prompt Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Defensive JSON Parser & Sanitization Node\n * Isolates the raw JSON structures from LLM markdown enclosures \n * to avoid downstream runtime parse exceptions.\n */\nconst items = $input.all();\nreturn items.map(item => {\n    let inputData = item.json.text || item.json.output || \"\";\n    let parsed;\n    try {\n        const jsonMatch = inputData.match(/\\{[\\s\\S]*\\}/);\n        if (jsonMatch) {\n            parsed = JSON.parse(jsonMatch[0]);\n        } else {\n            throw new Error(\"No JSON object found.\");\n        }\n    } catch (e) {\n        // Robust structural fallback values to maintain pipeline availability\n        parsed = {\n            canva_assets: { dish_title: \"Today's Feature\", offer_badge: \"Special Offer\" },\n            flux_prompt: \"Professional close-up product photography, clean corporate staging on a modern rustic background, highly detailed, photorealistic.\",\n            captions: { instagram: \"\", facebook: \"\", tiktok: \"\", sms: \"\", trendy_touchy: \"\" }\n        };\n    }\n    return {\n        json: {\n            dish_title: parsed.canva_assets ? parsed.canva_assets.dish_title : \"Special Feature\",\n            offer_badge: parsed.canva_assets ? parsed.canva_assets.offer_badge : \"Special Offer\",\n            image_prompt: parsed.flux_prompt || parsed.image_prompt,\n            caption_instagram: parsed.captions ? parsed.captions.instagram : \"\",\n            caption_facebook: parsed.captions ? parsed.captions.facebook : \"\",\n            caption_tiktok: parsed.captions ? parsed.captions.tiktok : \"\",\n            caption_sms: parsed.captions ? parsed.captions.sms : \"\",\n            caption_trendy_touchy: parsed.captions ? parsed.captions.trendy_touchy : \"\"\n        }\n    };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2848,
+        624
+      ],
+      "id": "efa102f1-3b73-4378-95eb-ffb05a4411a4",
+      "name": "Parse JSON Contract"
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $node[\"Filter Today's Row\"].json.metadata.folder_timestamp }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "[YOUR_GOOGLE_DRIVE_PARENT_FOLDER_ID_HERE]",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3056,
+        624
+      ],
+      "id": "5b680641-f112-42a3-90f5-b3925d11524c",
+      "name": "GDrive: Create Daily Folder",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "HlkbOFuwVzeHUXd5",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer [YOUR_REPLICATE_API_TOKEN]"
+            },
+            {
+              "name": "Prefer",
+              "value": "wait"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    \"input\": {\n      \"prompt\": $(\"Parse JSON Contract\").item.json.image_prompt,\n      \"aspect_ratio\": \"1:1\",\n      \"num_inference_steps\": 4,\n      \"output_format\": \"png\"\n    }\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3280,
+        624
+      ],
+      "id": "9ed3f4e9-d9e2-4678-9ace-f5b0f3c0be93",
+      "name": "HTTP Request: Flux Generation"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.output[0] }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3504,
+        624
+      ],
+      "id": "48bc1069-7dec-4eb9-b1ec-858f687378f9",
+      "name": "Download Flux Image"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Serverless Dynamic Layout Compiler\n * Decouples raw business graphics from brittle static image-editor APIs.\n * Compiles customized HTML elements structured dynamically with CSS Flexbox & Grid.\n */\n\n// 🔑 CONFIGURATION: ENTER YOUR BRAND DETAILS HERE\nconst USER_ID = \"YOUR_HCTI_USER_ID\";\nconst API_KEY = \"YOUR_HCTI_API_KEY\";\n\nconst BRAND_NAME = \"YOUR BRAND NAME\";\nconst ACCENT_COLOR = \"#ff9900\";\nconst TEXT_ACCENT_COLOR = \"#000000\";\nconst METADATA_LINE_1 = \"📍 123 Main Street, New York, NY\";\nconst METADATA_LINE_2 = \"📞 (555) 019-9111  •  🌐 yourwebsite.com\";\n\n// ------------------------------------------\n\nconst fluxImage = $node[\"HTTP Request: Flux Generation\"].json.output[0];\nconst contract = $node[\"Parse JSON Contract\"].json;\nconst meta = $node[\"Filter Today's Row\"].json.metadata;\n\nconst dateRaw = meta.date;\nconst dayStr = meta.day || \"TODAY\";\n\nconst formatDateStr = (rawDate) => {\n  try {\n    const parts = rawDate.split('-');\n    if (parts.length === 3) {\n      const months = [\"Jan\", \"Feb\", \"Mar\", \"Apr\", \"May\", \"Jun\", \"Jul\", \"Aug\", \"Sep\", \"Oct\", \"Nov\", \"Dec\"];\n      return `${months[parseInt(parts[1]) - 1]} ${parseInt(parts[2])}, ${parts[0]}`;\n    }\n  } catch (e) {}\n  return rawDate;\n};\n\nconst dateFormatted = formatDateStr(dateRaw);\nconst dateAndDayLabel = `${dayStr.toUpperCase()} • ${dateFormatted.toUpperCase()}`;\n\n// ==========================================\n// 1. INSTAGRAM LAYOUT (1:1 - 1080x1080)\n// ==========================================\nconst instagramHtml = `<div class='ad-card instagram' style='background-image: url(\"${fluxImage}\");'>\n  <div class='overlay-top'>\n    <div class='brand-logo'>${BRAND_NAME}</div>\n    <div class='date-badge'>${dateAndDayLabel}</div>\n  </div>\n  <div class='overlay-bottom'>\n    <div class='offer-tag-row'>\n      <span class='offer-badge'>${contract.offer_badge}</span>\n    </div>\n    <h1 class='dish-title'>${contract.dish_title}</h1>\n    <p class='restaurant-metadata'>${METADATA_LINE_1}  •  ${METADATA_LINE_2}</p>\n  </div>\n</div>`;\n\nconst instagramCss = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Poppins:wght@400;600;700&display=swap');\n* { box-sizing: border-box; margin: 0; padding: 0; }\n.ad-card { width: 1080px; height: 1080px; position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 60px; background-size: cover; background-position: center; font-family: 'Poppins', sans-serif; overflow: hidden; }\n.ad-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 65%, rgba(0,0,0,0.85) 100%); z-index: 1; }\n.overlay-top { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: center; width: 100%; }\n.brand-logo { font-family: 'Playfair Display', serif; font-size: 34px; font-weight: 700; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; text-shadow: 2px 2px 8px rgba(0,0,0,0.6); border-bottom: 3px solid ${ACCENT_COLOR}; padding-bottom: 5px; }\n.date-badge { background: rgba(0, 0, 0, 0.6); color: #ffffff; font-size: 14px; font-weight: 700; padding: 8px 16px; border-radius: 4px; border-left: 3px solid ${ACCENT_COLOR}; letter-spacing: 1px; }\n.overlay-bottom { position: relative; z-index: 2; width: 100%; margin-top: auto; }\n.offer-tag-row { margin-bottom: 12px; }\n.offer-badge { background: ${ACCENT_COLOR}; color: ${TEXT_ACCENT_COLOR}; font-size: 18px; font-weight: 700; text-transform: uppercase; padding: 8px 18px; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); letter-spacing: 1px; }\n.dish-title { font-family: 'Playfair Display', serif; font-size: 72px; font-weight: 700; color: #ffffff; margin-bottom: 15px; text-shadow: 3px 3px 15px rgba(0,0,0,0.8); line-height: 1.1; font-style: italic; }\n.restaurant-metadata { color: #e2e8f0; font-size: 16px; line-height: 1.4; text-shadow: 2px 2px 6px rgba(0,0,0,0.8); font-weight: 400; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px; }`;\n\n// ==========================================\n// 2. FACEBOOK LAYOUT (1:1 - 1080x1080 community-centered)\n// ==========================================\nconst facebookHtml = `<div class='ad-card facebook' style='background-image: url(\"${fluxImage}\");'>\n  <div class='overlay-top'>\n    <div class='brand-logo'>${BRAND_NAME}</div>\n    <div class='date-badge'>${dateAndDayLabel}</div>\n  </div>\n  <div class='overlay-bottom'>\n    <h1 class='dish-title'>${contract.dish_title}</h1>\n    <div class='fb-announcement'>\n      <span class='badge-label'>TODAY'S SPECIAL OFFER</span>\n      <p class='offer-desc'>${contract.offer_badge}</p>\n    </div>\n    <p class='restaurant-metadata'>${METADATA_LINE_1}<br>${METADATA_LINE_2}</p>\n  </div>\n</div>`;\n\nconst facebookCss = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Poppins:wght@400;600;700&display=swap');\n* { box-sizing: border-box; margin: 0; padding: 0; }\n.ad-card { width: 1080px; height: 1080px; position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 60px; background-size: cover; background-position: center; font-family: 'Poppins', sans-serif; overflow: hidden; }\n.ad-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0.9) 100%); z-index: 1; }\n.overlay-top { position: relative; z-index: 2; display: flex; justify-content: space-between; align-items: center; width: 100%; }\n.brand-logo { font-family: 'Playfair Display', serif; font-size: 34px; font-weight: 700; color: #ffffff; letter-spacing: 2px; text-transform: uppercase; text-shadow: 2px 2px 8px rgba(0,0,0,0.6); border-bottom: 3px solid ${ACCENT_COLOR}; padding-bottom: 5px; }\n.date-badge { background: ${ACCENT_COLOR}; color: ${TEXT_ACCENT_COLOR}; font-size: 14px; font-weight: 700; padding: 8px 16px; border-radius: 4px; letter-spacing: 1px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }\n.overlay-bottom { position: relative; z-index: 2; width: 100%; margin-top: auto; }\n.dish-title { font-family: 'Playfair Display', serif; font-size: 68px; font-weight: 700; color: #ffffff; margin-bottom: 18px; text-shadow: 3px 3px 15px rgba(0,0,0,0.8); line-height: 1.1; }\n.fb-announcement { background: rgba(0, 0, 0, 0.75); border-left: 5px solid ${ACCENT_COLOR}; padding: 15px 20px; border-radius: 4px; margin-bottom: 20px; }\n.badge-label { color: ${ACCENT_COLOR}; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; display: block; margin-bottom: 4px; }\n.offer-desc { color: #ffffff; font-size: 24px; font-weight: 700; text-transform: uppercase; }\n.restaurant-metadata { color: #cbd5e1; font-size: 15px; line-height: 1.5; text-shadow: 2px 2px 6px rgba(0,0,0,0.8); font-weight: 400; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 15px; }`;\n\n// ==========================================\n// 3. TIKTOK LAYOUT (9:16 - 1080x1920 Vertical format!)\n// ==========================================\nconst tiktokHtml = `<div class='ad-card tiktok' style='background-image: url(\"${fluxImage}\");'>\n  <div class='overlay-top'>\n    <div class='date-pill'>${dateAndDayLabel}</div>\n    <div class='brand-logo-small'>${BRAND_NAME}</div>\n  </div>\n  <div class='overlay-bottom'>\n    <div class='tiktok-badge-container'>\n      <span class='tt-badge'>🔥 ${contract.offer_badge}</span>\n    </div>\n    <h1 class='dish-title-large'>${contract.dish_title}</h1>\n    <div class='brand-footer'>\n      <p class='brand-subtitle'>${METADATA_LINE_1}</p>\n      <div class='brand-url'>${WEBSITE}</div>\n    </div>\n  </div>\n</div>`;\n\nconst tiktokCss = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Poppins:wght@400;600;700&display=swap');\n* { box-sizing: border-box; margin: 0; padding: 0; }\n.ad-card { width: 1080px; height: 1920px; position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 80px; background-size: cover; background-position: center; font-family: 'Poppins', sans-serif; overflow: hidden; }\n.ad-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 20%, rgba(0,0,0,0) 70%, rgba(0,0,0,0.9) 100%); z-index: 1; }\n.overlay-top { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: 15px; width: 100%; }\n.brand-logo-small { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 700; color: #ffffff; letter-spacing: 3px; text-transform: uppercase; text-shadow: 2px 2px 8px rgba(0,0,0,0.8); }\n.date-pill { background: ${ACCENT_COLOR}; color: ${TEXT_ACCENT_COLOR}; font-size: 16px; font-weight: 700; padding: 10px 24px; border-radius: 50px; letter-spacing: 1.5px; box-shadow: 0 6px 12px rgba(0,0,0,0.3); }\n.overlay-bottom { position: relative; z-index: 2; width: 100%; margin-top: auto; }\n.tiktok-badge-container { margin-bottom: 25px; }\n.tt-badge { background: #ffffff; color: #000000; font-size: 28px; font-weight: 700; text-transform: uppercase; padding: 14px 28px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); letter-spacing: 1px; display: inline-block; border-left: 6px solid ${ACCENT_COLOR}; }\n.dish-title-large { font-family: 'Playfair Display', serif; font-size: 110px; font-weight: 700; color: #ffffff; margin-bottom: 25px; text-shadow: 4px 4px 20px rgba(0,0,0,0.95); line-height: 1.05; font-style: italic; }\n.brand-footer { border-top: 2px solid rgba(255,255,255,0.2); padding-top: 25px; }\n.brand-subtitle { color: #cbd5e1; font-size: 20px; text-shadow: 2px 2px 6px rgba(0,0,0,0.8); font-weight: 400; margin-bottom: 10px; }\n.brand-url { color: ${ACCENT_COLOR}; font-size: 24px; font-weight: 700; text-transform: lowercase; letter-spacing: 1px; text-shadow: 2px 2px 6px rgba(0,0,0,0.8); }`;\n\n// ==========================================\n// Dynamic Authorization Token\n// ==========================================\nconst token = Buffer.from(`${USER_ID}:${API_KEY}`).toString(\"base64\");\nconst authorizationHeader = `Basic ${token}`;\n\nreturn [\n  {\n    json: {\n      serialized_body: JSON.stringify({\n        html: instagramHtml,\n        css: instagramCss,\n        google_fonts: \"Playfair Display|Poppins\"\n      }),\n      auth_header: authorizationHeader,\n      file_name: \"instagram.png\"\n    }\n  },\n  {\n    json: {\n      serialized_body: JSON.stringify({\n        html: facebookHtml,\n        css: facebookCss,\n        google_fonts: \"Playfair Display|Poppins\"\n      }),\n      auth_header: authorizationHeader,\n      file_name: \"fb.png\"\n    }\n  },\n  {\n    json: {\n      serialized_body: JSON.stringify({\n        html: tiktokHtml,\n        css: tiktokCss,\n        google_fonts: \"Playfair Display|Poppins\"\n      }),\n      auth_header: authorizationHeader,\n      file_name: \"tiktok.png\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        624
+      ],
+      "id": "ae08f3f9-1f5e-461a-85d1-f2b9f37946ff",
+      "name": "Prepare HTML Flyer Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hcti.io/v1/image",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ $json.auth_header }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.serialized_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3936,
+        624
+      ],
+      "id": "785613f8-7b30-4d33-b15f-6e4f1390f7e2",
+      "name": "HTMLtoImage: Create Flyer"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4160,
+        624
+      ],
+      "id": "e16a1035-1f9b-4d90-a14c-784e99dbdabe",
+      "name": "Download Branded Flyer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map(item => {\n    const captions = `===========================================\nINSTAGRAM CAPTION\n===========================================\n${item.json.caption_instagram || ''}\n\n===========================================\nFACEBOOK CAPTION\n===========================================\n${item.json.caption_facebook || ''}\n\n===========================================\nTIKTOK CAPTION\n===========================================\n${item.json.caption_tiktok || ''}\n\n===========================================\nSMS CAPTION\n===========================================\n${item.json.caption_sms || ''}\n\n===========================================\nTRENDY TOUCHY CAPTION\n===========================================\n${item.json.caption_trendy_touchy || ''}`;\n    return {\n        json: item.json,\n        binary: {\n            data: {\n                data: Buffer.from(captions, 'utf-8').toString('base64'),\n                mimeType: 'text/plain',\n                fileName: 'Caption.txt'\n            }\n        }\n    };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3504,
+        816
+      ],
+      "id": "df02b3eb-8b8d-46cc-aa9f-fafb341751a9",
+      "name": "Create Caption File Wrapper"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map(item => {\n    const promptText = item.json.image_prompt || '';\n    return {\n        json: item.json,\n        binary: {\n            data: {\n                data: Buffer.from(promptText, 'utf-8').toString('base64'),\n                mimeType: 'text/plain',\n                fileName: 'Prompt Used.txt'\n            }\n        }\n    };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3504,
+        992
+      ],
+      "id": "d53e4fc1-f4f0-431a-858a-e383b1abf7aa",
+      "name": "Create Prompt File Wrapper"
+    },
+    {
+      "parameters": {
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('GDrive: Create Daily Folder').first().json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3728,
+        816
+      ],
+      "id": "7ea0b8f5-1ec1-420e-a36e-f1478f1bda32",
+      "name": "GDrive: Upload Caption",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "HlkbOFuwVzeHUXd5",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('GDrive: Create Daily Folder').first().json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3728,
+        992
+      ],
+      "id": "adf41464-493d-4ce4-b97c-95bda6ffcb11",
+      "name": "GDrive: Upload Prompt Log",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "HlkbOFuwVzeHUXd5",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "fileId": "root",
+        "binaryFile": true,
+        "binaryPropertyName": "data",
+        "fileName": "={{ $json.file_name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('GDrive: Create Daily Folder').first().json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4384,
+        624
+      ],
+      "id": "7ce38d25-564b-4598-94d6-03c5379a0498",
+      "name": "GDrive: Upload Flyer",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "HlkbOFuwVzeHUXd5",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-6",
+          "cachedResultName": "Claude Sonnet 4.6"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        2544,
+        848
+      ],
+      "id": "264bb579-e781-4fb3-8462-1eea2d4da3d0",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "DlBJXW5q3WDNdN1T",
+          "name": "Anthropic account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Filter Today's Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Today's Row": {
+      "main": [
+        [
+          {
+            "node": "Claude Copy & Prompt Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Copy & Prompt Engine": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON Contract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON Contract": {
+      "main": [
+        [
+          {
+            "node": "GDrive: Create Daily Folder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Caption File Wrapper",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Prompt File Wrapper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GDrive: Create Daily Folder": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Flux Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Flux Generation": {
+      "main": [
+        [
+          {
+            "node": "Download Flux Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Flux Image": {
+      "main": [
+        [
+          {
+            "node": "Prepare HTML Flyer Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare HTML Flyer Payload": {
+      "main": [
+        [
+          {
+            "node": "HTMLtoImage: Create Flyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTMLtoImage: Create Flyer": {
+      "main": [
+        [
+          {
+            "node": "Download Branded Flyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Branded Flyer": {
+      "main": [
+        [
+          {
+            "node": "GDrive: Upload Flyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Caption File Wrapper": {
+      "main": [
+        [
+          {
+            "node": "GDrive: Upload Caption",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Prompt File Wrapper": {
+      "main": [
+        [
+          {
+            "node": "GDrive: Upload Prompt Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Claude Copy & Prompt Engine",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "450c095952d19afbf1dd52ca70f023f66deef03b66aefe80196ea3b3d4d6d8fc"
+  }
+}
